@@ -13,43 +13,14 @@
 
 #define BUFFER_LEN 100
 
-// Define your utility functions here, you will likely need to add more...
+int memory_index[MEM_BLOCKS] = {0}; // Contains list of indices of used memory
+int memory[MEMORY] = {0}; // Memory array
 
-int alloc_mem(resources *res, int size, int priority){
-    int max_memory = 0;
-    int memory_count = size;
-    int memory_index = 0;
-    if (priority == 0){
-        max_memory = 1024;
-        memory_index = 960;
-    }
-    else {
-        max_memory = 960;
-    }
-    for (; memory_index < max_memory && memory_count > 0; memory_index++){
-        if (res->memory[memory_index] == 0){
-            res->memory[memory_index] = 1;
-            memory_count--;
-        }
-    }
-    return memory_index - size;
-}
-
-void free_mem(resources *res, int index, int size){
-    int memory_index = index;
-    while (memory_index < index + size){
-        res->memory[memory_index] = 0;
-        memory_index++;
-    }  
-}
-
-
-// Loads the processes listed in the input file into the dispatch
-// list array
-int load_dispatch(char *dispatch_file, int process_array[][9]){
-    char input_buffer[BUFFER_LEN], *split_input;
+// Loads the processes listed in the input file into the dispatch list array
+int load_dispatch(char *dispatch_file, int process_array[][NUM_ATTR]){
+    char input_buffer[BUFFER_LEN];
     FILE *file = fopen(dispatch_file, "r");
-    int process_index = 0, resource_index = 0;
+    int process_index = 0;
 
     // Checking if input file exits
     if (file == NULL){
@@ -62,141 +33,169 @@ int load_dispatch(char *dispatch_file, int process_array[][9]){
         // and resulting strings converted to ints and copied to the
         // process values as defined in queue.h
         while(fgets(input_buffer, BUFFER_LEN, file) != NULL){
-            split_input = strtok(input_buffer, "\n");
-            split_input = strtok(split_input, ",");
-            process_array[process_index][resource_index] = atoi(split_input);
-            resource_index++;
-            split_input = strtok(NULL, ",");
-            process_array[process_index][resource_index] = atoi(split_input);
-            resource_index++;
-            split_input = strtok(NULL, ",");
-            process_array[process_index][resource_index] = atoi(split_input);
-            resource_index++;
-            split_input = strtok(NULL, ",");
-            process_array[process_index][resource_index] = atoi(split_input);
-            resource_index++;
-            split_input = strtok(NULL, ",");
-            process_array[process_index][resource_index] = atoi(split_input);
-            resource_index++;
-            split_input = strtok(NULL, ",");
-            process_array[process_index][resource_index] = atoi(split_input);
-            resource_index++;
-            split_input = strtok(NULL, ",");
-            process_array[process_index][resource_index] = atoi(split_input);
-            resource_index++;
-            split_input = strtok(NULL, ",");
-            process_array[process_index][resource_index] = atoi(split_input);
-            resource_index++;
-            process_array[process_index][resource_index] = -1;
-            resource_index = 0;
+            char *split_input = strtok(input_buffer, "\n");
+            process_array[process_index][0] = atoi(strtok(split_input, ","));
+            for (int index = 1; index < 8; index++){
+                process_array[process_index][index] = atoi(strtok(NULL, ","));
+            }
             process_index++;
         }
+        fclose(file);
     }
-    fclose(file);
     return process_index;
 }
 
 // Add each process structure instance to the job dispatch list queue
 // The job queue is filled according to the arrival time of each process
 // The priority and real time queues are filled according to resource availability
-void load_jobs(int time, int num_processes, int dispatch_list[][9], node_t *job_queue, node_t *realtime_queue, node_t *first_priority, node_t *second_priority, node_t *third_priority, resources *available_res){
-    int queued_jobs = 0;
-    
+void load_jobs(int time, int num_processes, int dispatch_list[][NUM_ATTR], queue_t *job_queue, queue_t *realtime_queue, queue_t *first_priority, queue_t *second_priority, queue_t *third_priority, resources_t *available_res){
+    int num_res = 0; 
     // if dispatcher time = process arrival time, push process into the job queue
     for (int i = 0; i < num_processes; i++){
         if (time == dispatch_list[i][0]){
-            process *new_process = (process*)malloc(sizeof(process));
-            new_process->arrival_time = dispatch_list[i][0];
-            new_process->priority = dispatch_list[i][1];
-            new_process->processor_time = dispatch_list[i][2];
-            new_process->mbytes = dispatch_list[i][3];
-            new_process->printers = dispatch_list[i][4];
-            new_process->scanners = dispatch_list[i][5];
-            new_process->modems = dispatch_list[i][6];
-            new_process->cds = dispatch_list[i][7];
-            new_process->memory_index = dispatch_list[i][8];
+            process_t new_process;
+            new_process.arrival_time = dispatch_list[i][num_res++];
+            new_process.priority = dispatch_list[i][num_res++];
+            new_process.processor_time = dispatch_list[i][num_res++];
+            new_process.mbytes = dispatch_list[i][num_res++];
+            new_process.printers = dispatch_list[i][num_res++];
+            new_process.scanners = dispatch_list[i][num_res++];
+            new_process.modems = dispatch_list[i][num_res++];
+            new_process.cds = dispatch_list[i][num_res++];
+            new_process.memory_index = -1;
+            new_process.already_running = false;
+            new_process.process_id = -1;
+            new_process.process_num = i + 1;
+            new_process.suspended = false;
+            num_res = 0;
             push(job_queue, new_process);
-            free(new_process);
-            new_process = NULL;
         }
     }
-    // if resources are available, push the process in job queue into the real time or priority 
-    // user queues. if not, push it back into the job queue
-    if (job_queue->next_node != NULL){
-        node_t *curr = job_queue->next_node;
-        queued_jobs++;
-        while(curr->next_node != NULL){
-            curr = curr->next_node;
-            queued_jobs++;
-        }
-        curr = NULL;
-        for (int i = 0; i < queued_jobs; i++){
-            process *proc = pop(job_queue);
-            if(resource_available(proc, available_res)){
-                available_res->cds -= proc->cds;
-                available_res->scanners -= proc->scanners;
-                available_res->printers -= proc->printers;
-                available_res->modems -= proc->modems;
-                if (proc->priority == 0){
-                    available_res->realtime_mem -= proc->mbytes;
-                }
-                else {
-                    available_res->memoryleft -= proc->mbytes;
-                }
-                switch (proc->priority){
+    // if resources are available, push the process in user queues. 
+    if (job_queue->head->next_node != NULL){
+        node_t *current = job_queue->head->next_node;
+        while(current != NULL){
+            if (resource_available(&(current->proc), available_res)){
+                process_t *temp = pop(job_queue);
+                alloc_resources(temp, available_res);
+                switch (temp->priority){
                     case 0:
-                        push(realtime_queue, proc);
+                        push(realtime_queue, *temp);
                         break;
                     case 1:
-                        push(first_priority, proc);
+                        push(first_priority, *temp);
                         break;
                     case 2:
-                        push(second_priority, proc);
+                        push(second_priority, *temp);
                         break;
                     case 3:
-                        push(third_priority, proc);
+                        push(third_priority, *temp);
                         break;
                     default:
                         break;
                 }
             }
-            else {
-                push(job_queue, proc);
-            }
-            proc = NULL;
-        }   
+            current = current->next_node;
+        }
     }
 }
 
 // Returns true if process resources are less than equal to available resources
 // false otherwise
-bool resource_available(process *proc, resources *available_res){
-    int cds = available_res->cds - proc->cds;
-    int modems = available_res->modems - proc->modems;
-    int printers = available_res->printers - proc->printers;
-    int scanners = available_res->scanners - proc->scanners;
-    int memory = 0;
+bool resource_available(process_t *proc, resources_t *available_res){
+    bool is_available = false;
+    int memory = -1;
     if (proc->priority == 0){
-        memory =  available_res->realtime_mem - proc->mbytes;
+        memory = available_res->realtime_mem_left - proc->mbytes;
     } 
     else {
-        memory = available_res->memoryleft - proc->mbytes;
+        memory = available_res->user_mem_left - proc->mbytes;
     }
-    if (cds >=0 && modems >=0 && printers >=0 && scanners >=0 && memory >= 0){
-        return true;
+    if (available_res->cds >= proc->cds && available_res->modems >= proc->modems && available_res->printers >= proc->printers && available_res->scanners >= proc->scanners && memory >= 0){
+        is_available = true;
+    }
+    return is_available;
+}
+
+// Allocates resources for a process
+void alloc_resources(process_t *proc, resources_t *available_res){
+    available_res->cds -= proc->cds;
+    available_res->scanners -= proc->scanners;
+    available_res->printers -= proc->printers;
+    available_res->modems -= proc->modems;
+    if (proc->priority == 0){
+        available_res->realtime_mem_left -= proc->mbytes;
     }
     else {
-        return false;
+        available_res->user_mem_left -= proc->mbytes;
+    }
+    proc->memory_index = alloc_mem(proc->mbytes, proc->priority);
+}
+
+//Allocates memory for a process
+int alloc_mem(int size, int priority){
+    int offset, start_index, end_index;
+    bool found = false;
+    if (priority == 0){
+        start_index = 0; //real time memory starts at index 0
+        end_index = 64 / MEM_BLOCKS;
+    }
+    else {
+        start_index = 64 / MEM_BLOCKS; //user memory starts after real time memory blocks
+        end_index = MEM_BLOCKS;
+    }
+    while (start_index < end_index){
+        if (memory_index[start_index] == 0){
+            for (int i = start_index; i < start_index + size / BASE_BLOCK; i++){
+                if (memory_index[i] != 0){
+                    found = false;
+                    break;
+                }
+                found = true;
+            }
+        }
+        if (found){
+            break;
+        }
+        start_index++;
+    }
+    if (!found){
+        return -1;
+    } else {
+        offset = start_index * BASE_BLOCK; // start of allocated memory in the memory array
+        for (int i = offset; i < size; i++){
+            memory[i] = 1;
+        }
+        for (int i = start_index; i < start_index + size / BASE_BLOCK; i++){
+            memory_index[i] = 1;
+        }
+        return offset;
     }
 }
 
 
-// Returns true if all queues are empty, false otherwise
-bool terminate_dispatcher(node_t *job_queue, node_t *realtime_queue, node_t *first_priority, node_t *second_priority, node_t *third_priority){
-    if (job_queue->next_node == NULL && realtime_queue->next_node == NULL && first_priority->next_node == NULL && second_priority->next_node == NULL && third_priority->next_node == NULL){
-        return true;
+// De-allocates resources once a process terminates
+void dealloc_res(resources_t *res, process_t *proc){
+    res->cds += proc->cds;
+    res->scanners += proc->scanners;
+    res->printers += proc->printers;
+    res->modems += proc->modems;
+    if (proc->priority == 0){
+        res->realtime_mem_left += proc->mbytes;
     }
     else {
-        return false;
+        res->user_mem_left += proc->mbytes;
+    }
+    dealloc_mem(memory, proc->memory_index, proc->mbytes);
+}
+
+// De-allocates memory 
+void dealloc_mem(int *memory, int offset, int size){
+    int start_index = offset / BASE_BLOCK, end_index = start_index + size / BASE_BLOCK;
+    for (int i = offset; i < size; i++){
+        memory[i] = 0;
+    }
+    for (int i = start_index; i < end_index; i++){
+        memory_index[i] = 0;
     }
 }
