@@ -1,5 +1,7 @@
 ## HOST-Dispatcher
-HOST Dispatcher project to simulate a simple process dispatcher and scheduler.<br><br>
+HOST Dispatcher project to simulate a simple process dispatcher and scheduler.<br>
+[![Build Status](https://travis-ci.org/Umar-Eh/HOST-Dispatcher.svg?branch=master)](https://travis-ci.org/Umar-Eh/HOST-Dispatcher)
+<br>
 
 **Description:**<br><br>
 The project involves implementing a HOST dispatcher process scheduler component for an OS (preferably UNIX based).<br><br>
