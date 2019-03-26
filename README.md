@@ -15,7 +15,7 @@ The processor time slice for this project is 1 second.<br><br>
 
 **Usage (tested on Ubuntu linux):**<br><br>
 * Clone the repository: https://github.com/Umar-Eh/HOST-Dispatcher.git
-* Run the command **make** to create the hostd executible.
+* Run the command **make** to create the hostd executable.
 * Run the command **./hostd** to simulate the process dispatcher.
 <br>Please note that there is a pre-compiled **process** binary used by the hostd dispatcher to simulate a process. You may<br>
 create your own process binary and place it in the program directory.<br>
